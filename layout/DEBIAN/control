@@ -1,0 +1,9 @@
+Package: com.decaro.appradioextensions
+Name: AppRadio Extensions
+Depends: mobilesubstrate, firmware (>= 7.0)
+Version: 3.0
+Architecture: iphoneos-arm
+Description: Extensions for Pioneer's AppRadio
+Maintainer: Mike DeCaro
+Author: Mike DeCaro
+Section: Tweaks

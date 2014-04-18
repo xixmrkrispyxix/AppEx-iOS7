@@ -1,0 +1,7 @@
+.DS_Store
+.theos
+*.deb
+_
+obj
+.Trashes
+*.sublime-workspace

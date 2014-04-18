@@ -1,0 +1,113 @@
+//
+//  Tweak.xmi
+//  AppEx
+//
+//
+//  Originally from MessageBox (github.com/b3ll/MessageBox)
+//
+//  Tweak.xm
+//  MessageBox
+//
+//  Created by Adam Bell on 2014-02-04.
+//  Copyright (c) 2014 Adam Bell. All rights reserved.
+//
+
+#import "appex.h"
+
+#define MAX_SUPPORTED_VERSION_APPRADIO @"2.6.1"
+
+extern "C" int xpc_connection_get_pid(id connection);
+
+#include "AppRadio.xm"
+#include "SpringBoard.xm"
+
+/**
+ * backboardd Hooks
+ *
+ */
+
+#define XPCObjects "/System/Library/PrivateFrameworks/XPCObjects.framework/XPCObjects"
+
+%config(generator=MobileSubstrate);
+
+%group backboarddHooks
+
+static NSDictionary *_prefs;
+
+static int (*orig_XPConnectionHasEntitlement)(id connection, NSString *entitlement);
+
+static int appex_XPConnectionHasEntitlement(id connection, NSString *entitlement) {
+    DebugLog(@"XPCConnectionHasEntitlement... no u");
+
+    //Only grant the required entitlement
+    if (xpc_connection_get_pid(connection) == PIDForProcessNamed(@"SpringBoard") && [entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"])
+        return true;
+
+    return orig_XPConnectionHasEntitlement(connection, entitlement);
+}
+
+%end
+
+static BOOL versionNumberIsSupported() {
+    NSString *versionString = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    NSString *maxSupportedVersion = nil;
+    
+    if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"jp.pioneer.mbg.cargateway.carhome"]) {
+        maxSupportedVersion = MAX_SUPPORTED_VERSION_APPRADIO;
+    }
+    else {
+        return NO;
+    }
+    
+    BOOL supported = YES;
+    if (([versionString compare:maxSupportedVersion options:NSNumericSearch] == NSOrderedDescending)) {
+        UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"AppEx"
+                                                                message:@"Looks like you're using an unsupported version, AppEx has been disabled."
+                                                               delegate:nil
+                                                      cancelButtonTitle:@"OK"
+                                                      otherButtonTitles:nil];
+        [alertView performSelector:@selector(show)
+                        withObject:nil
+                        afterDelay:5.0];
+        supported = NO;
+    }
+    
+    return supported;
+}
+
+%ctor {
+   
+    NSString *bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
+    
+    if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"jp.pioneer.mbg.cargateway.carhome"]) {
+        // Placeholder for Facebook App
+        if (!versionNumberIsSupported()) {
+            NSLog(@"APPRADIO APP VERSION NOT SUPPORTED");
+            return;
+        }
+        
+        %init(AppRadioHooks);
+        
+        DebugLog(@"APPRADIO APP HOOKS");
+    }
+    else if ([bundleIdentifier isEqualToString:@"com.apple.springboard"]) {
+        %init(SpringBoardHooks);
+        
+        CFNotificationCenterRef darwin = CFNotificationCenterGetDarwinNotifyCenter();
+        CFNotificationCenterAddObserver(darwin, NULL, appLaunching, CFSTR("com.decaro.appradioextensions.appLaunching"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+        
+        DebugLog(@"APPEX HOOKS");
+    }
+    else if ([bundleIdentifier isEqualToString:@"com.apple.backboardd"]) {
+        %init(backboarddHooks);
+
+        dlopen(XPCObjects, RTLD_LAZY);
+
+        void *xpcFunction = MSFindSymbol(NULL, "_XPCConnectionHasEntitlement");
+
+        MSHookFunction(xpcFunction, (void *)appex_XPConnectionHasEntitlement, (void **)&orig_XPConnectionHasEntitlement);
+
+        DebugLog(@"BACKBOARDD HOOKS");
+    }
+   
+}
